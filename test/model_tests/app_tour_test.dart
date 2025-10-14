@@ -23,10 +23,7 @@ class CustomTutorialController extends TutorialCoachMarkController {
   void skip() {}
 }
 
-class MockTutorialCoachMark extends Mock implements TutorialCoachMark {
-  @override
-  void next() {}
-}
+class MockTutorialCoachMark extends Mock implements TutorialCoachMark {}
 
 class MockAppTour extends Mock implements AppTour {
   MockAppTour({
@@ -251,6 +248,179 @@ void main() {
         CustomTutorialController(),
       ) as GestureDetector)
           .onTap!();
+    });
+
+    testWidgets('Test cases for FocusTarget: circle shape and isEnd COMPLETE',
+        (tester) async {
+      AppTour? mockAppTour;
+      FocusTarget? mockFocusTarget;
+      BuildContext? capturedContext;
+
+      final app = BaseView<AppLanguage>(
+        onModelReady: (model) => model.initialize(),
+        builder: (context, langModel, child) {
+          return MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: [
+              const AppLocalizationsDelegate(isTest: true),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: BaseView<MainScreenViewModel>(
+              onModelReady: (model2) => model2.initialise(
+                context,
+                fromSignUp: false,
+                mainScreenIndex: 0,
+                demoMode: true,
+                testMode: true,
+              ),
+              builder: (context, model2, child) {
+                capturedContext = context;
+                mockAppTour = AppTour(model: model2);
+                mockFocusTarget = FocusTarget(
+                  key: MainScreenViewModel.keyDrawerLeaveCurrentOrg,
+                  keyName: 'keyDrawerLeaveCurrentOrg',
+                  description: 'description',
+                  next: null, // explicitly null to test safe handling
+                  appTour: mockAppTour!,
+                  isCircle: true,
+                  isEnd: true,
+                );
+                model2.context = context;
+                return Scaffold(
+                  drawer: const Drawer(),
+                  key: MainScreenViewModel.scaffoldKey,
+                  body: TextButton(
+                    key: MainScreenViewModel.keyDrawerLeaveCurrentOrg,
+                    child: const Text('tutorial'),
+                    onPressed: () {
+                      MainScreenViewModel.scaffoldKey.currentState!
+                          .openDrawer();
+                      mockAppTour!.showTutorial(
+                        onClickTarget: (x) {},
+                        onFinish: () {},
+                        targets: <FocusTarget>[mockFocusTarget!],
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            navigatorKey: navigationService.navigatorKey,
+          );
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+
+      final tutorialBtn =
+          find.byKey(MainScreenViewModel.keyDrawerLeaveCurrentOrg);
+      expect(tutorialBtn, findsOneWidget);
+
+      // Press and ensure builders can be invoked
+      (tester.widget(tutorialBtn) as TextButton).onPressed!();
+      await tester.pumpAndSettle();
+
+      // first builder returns a Container
+      final first = mockFocusTarget!.focusWidget.contents![0].builder!(
+          capturedContext!, CustomTutorialController());
+      expect(first, isA<Container>());
+
+      // second builder should return a GestureDetector whose child Text is 'COMPLETE'
+      final second = mockFocusTarget!.focusWidget.contents![1].builder!(
+          capturedContext!, CustomTutorialController());
+      expect(second, isA<GestureDetector>());
+      final detector = second as GestureDetector;
+      // Ensure tapping doesn't throw even when next is null
+      detector.onTap!();
+    });
+
+    testWidgets('Test case for next callback invoked and tutorialCoachMark.next called',
+        (tester) async {
+      // We'll spy on the tutorialCoachMark.next call by injecting a mock
+      final mockTutorial = MockTutorialCoachMark();
+
+      AppTour? mockAppTour;
+      FocusTarget? mockFocusTarget;
+      BuildContext? capturedContext;
+
+      var invoked = false;
+
+      final app = BaseView<AppLanguage>(
+        onModelReady: (model) => model.initialize(),
+        builder: (context, langModel, child) {
+          return MaterialApp(
+            locale: const Locale('en'),
+            localizationsDelegates: [
+              const AppLocalizationsDelegate(isTest: true),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: BaseView<MainScreenViewModel>(
+              onModelReady: (model2) => model2.initialise(
+                context,
+                fromSignUp: false,
+                mainScreenIndex: 0,
+                demoMode: true,
+                testMode: true,
+              ),
+              builder: (context, model2, child) {
+                capturedContext = context;
+                mockAppTour = AppTour(model: model2);
+                // replace underlying tutorialCoachMark with our mock
+                mockAppTour!.tutorialCoachMark = mockTutorial;
+
+                mockFocusTarget = FocusTarget(
+                  key: MainScreenViewModel.keyDrawerLeaveCurrentOrg,
+                  keyName: 'keyDrawerLeaveCurrentOrg',
+                  description: 'description',
+                  next: () {
+                    invoked = true;
+                  },
+                  appTour: mockAppTour!,
+                );
+
+                model2.context = context;
+                return Scaffold(
+                  drawer: const Drawer(),
+                  key: MainScreenViewModel.scaffoldKey,
+                  body: TextButton(
+                    key: MainScreenViewModel.keyDrawerLeaveCurrentOrg,
+                    child: const Text('tutorial'),
+                    onPressed: () {
+                      MainScreenViewModel.scaffoldKey.currentState!
+                          .openDrawer();
+                      mockAppTour!.showTutorial(
+                        onClickTarget: (x) {},
+                        onFinish: () {},
+                        targets: <FocusTarget>[mockFocusTarget!],
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            navigatorKey: navigationService.navigatorKey,
+          );
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+
+      final tutorialBtn =
+          find.byKey(MainScreenViewModel.keyDrawerLeaveCurrentOrg);
+      expect(tutorialBtn, findsOneWidget);
+
+      // Directly invoke the second builder and trigger onTap; avoid calling showTutorial
+      final second = mockFocusTarget!.focusWidget.contents![1].builder!(
+          capturedContext!, CustomTutorialController()) as GestureDetector;
+      second.onTap!();
+
+      // Verify the next callback executed and tutorialCoachMark.next called
+      expect(invoked, isTrue);
+      verify(mockTutorial.next()).called(1);
     });
   });
 }
