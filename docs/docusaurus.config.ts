@@ -42,7 +42,6 @@ const config: Config = {
         theme: {
           customCss: [
             require.resolve("./src/css/custom.css"),
-            require.resolve("./src/css/index.css"),
           ],
         },
       },
@@ -50,6 +49,7 @@ const config: Config = {
   ],
 
   themeConfig: {
+    /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     // Replace with your project's social card
     image: "img/docusaurus-social-card.jpg",
     navbar: {
